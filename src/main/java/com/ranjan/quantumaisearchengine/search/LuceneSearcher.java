@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -25,6 +26,9 @@ public class LuceneSearcher implements Closeable {
     private final Directory dir;
     private final Analyzer analyzer;
 
+    @Value("${app.index.path:./data/index}")
+    private String indexPath;
+
 
     public LuceneSearcher(@Value("${app.index.path}") String indexPath) throws IOException {
         this.dir = FSDirectory.open(Path.of(indexPath));
@@ -33,40 +37,42 @@ public class LuceneSearcher implements Closeable {
 
 
     public List<Map<String, Object>> search(String q, int from, int size) throws Exception {
-        try (IndexReader reader = DirectoryReader.open(dir)) {
-            IndexSearcher searcher = new IndexSearcher(reader);
-            searcher.setSimilarity(new BM25Similarity());
-
-
-            QueryParser qp = new QueryParser("body", analyzer);
-            Query query = qp.parse(QueryParser.escape(q));
-
-
-            TopDocs top = searcher.search(query, Math.max(from + size, 1));
-
-
-            List<Map<String, Object>> out = new ArrayList<>();
-            var scorer = new QueryScorer(query);
-            var highlighter = new Highlighter(new SimpleHTMLFormatter("<mark>", "</mark>"), scorer);
-            var fragmenter = new SimpleSpanFragmenter(scorer, 90);
-            highlighter.setTextFragmenter(fragmenter);
-
-
-            for (int i = from; i < Math.min(top.scoreDocs.length, from + size); i++) {
-                Document d = searcher.doc(top.scoreDocs[i].doc);
-                String title = Optional.ofNullable(d.get("title")).orElse("");
-                String url = d.get("url");
-                String snippet = title; // fallback snippet (we didn't store body)
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("title", title.isBlank() ? url : title);
-                item.put("url", url);
-                item.put("score", top.scoreDocs[i].score);
-                item.put("snippet", snippet);
-                out.add(item);
+        Path path = Path.of(indexPath);                 // ensure you have this field injected with @Value
+        Files.createDirectories(path);
+        try (Directory dir = FSDirectory.open(path)) {
+            // If no index exists yet, return empty results instead of throwing
+            if (!DirectoryReader.indexExists(dir)) {
+                return List.of();                       // <-- avoids IndexNotFoundException
             }
-            return out;
+
+            try (IndexReader reader = DirectoryReader.open(dir)) {
+                IndexSearcher searcher = new IndexSearcher(reader);
+                searcher.setSimilarity(new BM25Similarity());
+
+                Analyzer analyzer = new StandardAnalyzer();
+                QueryParser qp = new QueryParser("body", analyzer);
+                Query query = qp.parse(QueryParser.escape(q));
+
+                TopDocs top = searcher.search(query, Math.max(from + size, 1));
+                List<Map<String, Object>> out = new ArrayList<>();
+
+                for (int i = from; i < Math.min(top.scoreDocs.length, from + size); i++) {
+                    Document d = searcher.doc(top.scoreDocs[i].doc);
+                    String title = Optional.ofNullable(d.get("title")).orElse("");
+                    String url = d.get("url");
+
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("title", title.isBlank() ? url : title);
+                    item.put("url", url);
+                    item.put("score", top.scoreDocs[i].score);
+                    item.put("snippet", title);
+                    out.add(item);
+                }
+                return out;
+            }
         }
     }
+
 
 
     @Override
