@@ -1,8 +1,6 @@
 # Quantum AI Enabled Search Engine (Backend Component)
 
-This project is the **backend prototype** for out Quantum AI Enabled Search Engine Project.
-It provides REST APIs for crawling web pages, indexing their content using **Apache Lucene**, and retrieving ranked search results.  
-The research is to build a foundation similar to a classical search engine, ready for future integration with **LLM** and **Quantum-AI-based** modules.
+This project is the **backend prototype** for out Quantum AI Enabled Search Engine Project.  It provides REST APIs for crawling web pages, indexing their content using **Apache Lucene**, and retrieving ranked search results. The research is to build a foundation similar to a classical search engine, ready for future integration with **LLM** and **Quantum-AI-based** modules.
 
 ---
 
